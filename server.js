@@ -5,7 +5,11 @@ const Database = require('better-sqlite3');
 const app = express();
 const port = 3000;
 const db = new Database('database.db');
+const cors = require('cors');
 
+app.use(cors({
+  origin: 'http://localhost:5173'
+}));
 app.use(express.json());
 
 // Initialize Database
@@ -16,7 +20,16 @@ db.exec(`
     wallet_address TEXT NOT NULL,
     endpoint_url TEXT NOT NULL,
     price TEXT NOT NULL
-  )
+  );
+
+  CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_id INTEGER NOT NULL,
+    tx_hash TEXT NOT NULL,
+    status TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(service_id) REFERENCES services(id)
+  );
 `);
 
 /**
@@ -89,6 +102,36 @@ app.post('/register', async (req, res) => {
   }
 });
 
+// Endpoint: Get All Services
+app.get('/services', (req, res) => {
+  try {
+    const stmt = db.prepare('SELECT * FROM services');
+    const services = stmt.all();
+    res.json(services);
+  } catch (error) {
+    console.error('Database error:', error);
+    res.status(500).json({ error: 'Failed to fetch services' });
+  }
+});
+
+// Endpoint: Get Recent Transactions
+app.get('/transactions', (req, res) => {
+  try {
+    const stmt = db.prepare(`
+      SELECT t.*, s.name as service_name
+      FROM transactions t
+      JOIN services s ON t.service_id = s.id
+      ORDER BY t.timestamp DESC
+      LIMIT 10
+    `);
+    const transactions = stmt.all();
+    res.json(transactions);
+  } catch (error) {
+    console.error('Database error:', error);
+    res.status(500).json({ error: 'Failed to fetch transactions' });
+  }
+});
+
 // For testing verifyPayment manually via an endpoint (Optional, mostly for debug)
 app.post('/verify-payment', async (req, res) => {
   const { txHash, recipient, amount } = req.body;
@@ -123,15 +166,28 @@ app.post('/proxy-request', async (req, res) => {
     const isPaymentValid = await verifyPayment(tx_hash, service.wallet_address, service.price);
 
     if (!isPaymentValid) {
+      // Log failed transaction
+      db.prepare('INSERT INTO transactions (service_id, tx_hash, status) VALUES (?, ?, ?)')
+        .run(service_id, tx_hash, 'failed');
       return res.status(402).json({ error: 'Payment Required: Verification failed' });
     }
 
     // 3. Proxy request to external service
     try {
       const response = await axios.post(service.endpoint_url, payload);
+
+      // Log success transaction
+      db.prepare('INSERT INTO transactions (service_id, tx_hash, status) VALUES (?, ?, ?)')
+        .run(service_id, tx_hash, 'success');
+
       res.json(response.data);
     } catch (axiosError) {
       console.error('Error forwarding request:', axiosError.message);
+
+      // Log failed transaction (proxy error)
+      db.prepare('INSERT INTO transactions (service_id, tx_hash, status) VALUES (?, ?, ?)')
+        .run(service_id, tx_hash, 'failed_proxy');
+
       // Determine if we should send back the error from the service or a generic 502
       if (axiosError.response) {
         res.status(axiosError.response.status).json(axiosError.response.data);

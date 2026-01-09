@@ -30,19 +30,19 @@ async function verifyPayment(txHash, recipient, amount) {
   try {
     // using a public Sepolia RPC
     const provider = new ethers.JsonRpcProvider('https://rpc.sepolia.org');
-    
+
     // Get transaction receipt to ensure it is mined/confirmed
     const receipt = await provider.getTransactionReceipt(txHash);
-    
+
     if (!receipt || receipt.confirmations === 0) {
       console.log('Transaction not confirmed or found');
       return false;
     }
 
     const tx = await provider.getTransaction(txHash);
-    
+
     if (!tx) {
-        return false;
+      return false;
     }
 
     // Check recipient (case insensitive)
@@ -54,7 +54,7 @@ async function verifyPayment(txHash, recipient, amount) {
     // Check amount
     // ethers v6 uses BigInt for values
     const expectedValue = ethers.parseEther(amount);
-    
+
     if (tx.value !== expectedValue) {
       console.log(`Value mismatch: ${tx.value.toString()} !== ${expectedValue.toString()}`);
       return false;
@@ -78,8 +78,8 @@ app.post('/register', async (req, res) => {
   try {
     const stmt = db.prepare('INSERT INTO services (name, wallet_address, endpoint_url, price) VALUES (?, ?, ?, ?)');
     const info = stmt.run(name, wallet_address, endpoint_url, price);
-    res.status(201).json({ 
-      id: info.lastInsertRowid, 
+    res.status(201).json({
+      id: info.lastInsertRowid,
       message: 'Service registered successfully',
       data: { name, wallet_address, endpoint_url, price }
     });
@@ -91,13 +91,59 @@ app.post('/register', async (req, res) => {
 
 // For testing verifyPayment manually via an endpoint (Optional, mostly for debug)
 app.post('/verify-payment', async (req, res) => {
-    const { txHash, recipient, amount } = req.body;
-    const isValid = await verifyPayment(txHash, recipient, amount);
-    if (isValid) {
-        res.json({ success: true, message: 'Payment verified' });
-    } else {
-        res.status(400).json({ success: false, message: 'Payment invalid' });
+  const { txHash, recipient, amount } = req.body;
+  const isValid = await verifyPayment(txHash, recipient, amount);
+  if (isValid) {
+    res.json({ success: true, message: 'Payment verified' });
+  } else {
+    res.status(400).json({ success: false, message: 'Payment invalid' });
+  }
+});
+
+// Endpoint: Proxy Request
+const axios = require('axios');
+
+app.post('/proxy-request', async (req, res) => {
+  const { service_id, tx_hash, payload } = req.body;
+
+  if (!service_id || !tx_hash || !payload) {
+    return res.status(400).json({ error: 'Missing required fields: service_id, tx_hash, payload' });
+  }
+
+  try {
+    // 1. Look up service
+    const stmt = db.prepare('SELECT * FROM services WHERE id = ?');
+    const service = stmt.get(service_id);
+
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found' });
     }
+
+    // 2. Verify Payment
+    const isPaymentValid = await verifyPayment(tx_hash, service.wallet_address, service.price);
+
+    if (!isPaymentValid) {
+      return res.status(402).json({ error: 'Payment Required: Verification failed' });
+    }
+
+    // 3. Proxy request to external service
+    try {
+      const response = await axios.post(service.endpoint_url, payload);
+      res.json(response.data);
+    } catch (axiosError) {
+      console.error('Error forwarding request:', axiosError.message);
+      // Determine if we should send back the error from the service or a generic 502
+      if (axiosError.response) {
+        res.status(axiosError.response.status).json(axiosError.response.data);
+      } else {
+        res.status(502).json({ error: 'Bad Gateway: Failed to reach external service' });
+      }
+    }
+
+  } catch (error) {
+    console.error('Proxy error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 app.listen(port, () => {

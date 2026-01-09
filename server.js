@@ -43,6 +43,8 @@ async function verifyPayment(txHash, recipient, amount) {
   try {
     // using a public Sepolia RPC
     const provider = new ethers.JsonRpcProvider('https://ethereum-sepolia-rpc.publicnode.com');
+    // Token Address for MockMNEE
+    const TOKEN_ADDRESS = '0x6027Ad2bB75BD56B9E5B95A1348B146Ef41bF74e';
 
     // Get transaction receipt to ensure it is mined/confirmed
     const receipt = await provider.getTransactionReceipt(txHash);
@@ -52,24 +54,35 @@ async function verifyPayment(txHash, recipient, amount) {
       return false;
     }
 
-    const tx = await provider.getTransaction(txHash);
+    // ERC-20 Transfer Event Signature: Transfer(address indexed from, address indexed to, uint256 value)
+    const toggleTopic = ethers.id("Transfer(address,address,uint256)");
 
-    if (!tx) {
+    // Find the log that matches our Token Address and the Transfer event
+    const log = receipt.logs.find(l => {
+      return l.address.toLowerCase() === TOKEN_ADDRESS.toLowerCase() &&
+        l.topics[0] === toggleTopic;
+    });
+
+    if (!log) {
+      console.log('No ERC-20 Transfer log found for the specified token');
       return false;
     }
 
-    // Check recipient (case insensitive)
-    if (tx.to.toLowerCase() !== recipient.toLowerCase()) {
-      console.log(`Recipient mismatch: ${tx.to} !== ${recipient}`);
+    // Parse Log
+    const iface = new ethers.Interface(['event Transfer(address indexed from, address indexed to, uint256 value)']);
+    const parsedLog = iface.parseLog({ topics: log.topics.map(t => t), data: log.data });
+
+    // Check Recipient
+    if (parsedLog.args.to.toLowerCase() !== recipient.toLowerCase()) {
+      console.log(`Recipient mismatch: ${parsedLog.args.to} !== ${recipient}`);
       return false;
     }
 
-    // Check amount
-    // ethers v6 uses BigInt for values
-    const expectedValue = ethers.parseEther(amount);
+    // Check Amount (18 decimals)
+    const expectedValue = ethers.parseUnits(amount, 18);
 
-    if (tx.value !== expectedValue) {
-      console.log(`Value mismatch: ${tx.value.toString()} !== ${expectedValue.toString()}`);
+    if (parsedLog.args.value !== expectedValue) {
+      console.log(`Value mismatch: ${parsedLog.args.value.toString()} !== ${expectedValue.toString()}`);
       return false;
     }
 

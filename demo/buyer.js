@@ -16,14 +16,17 @@ async function main() {
 
         console.log(`Wallet address: ${wallet.address}`);
 
-        // Step A: Send 0.0001 ETH
-        const amountToSend = ethers.parseEther("0.0001");
-        console.log(`Sending 0.0001 ETH to ${TARGET_WALLET}...`);
+        // Step A: Send 5.0 MockMNEE Tokens
+        const TOKEN_ADDRESS = '0x6027Ad2bB75BD56B9E5B95A1348B146Ef41bF74e';
+        const amountToSend = ethers.parseUnits("5.0", 18);
+        console.log(`Sending 5.0 MockMNEE to ${TARGET_WALLET}...`);
 
-        const tx = await wallet.sendTransaction({
-            to: TARGET_WALLET,
-            value: amountToSend
-        });
+        const abi = [
+            "function transfer(address to, uint256 amount) returns (bool)"
+        ];
+        const contract = new ethers.Contract(TOKEN_ADDRESS, abi, wallet);
+
+        const tx = await contract.transfer(TARGET_WALLET, amountToSend);
 
         console.log(`Transaction sent: ${tx.hash}`);
 

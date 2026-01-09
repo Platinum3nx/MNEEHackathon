@@ -1,0 +1,56 @@
+1. High-Level Architecture
+We are building a Node.js Proxy Server that sits between a Buyer Agent and a Merchant Agent.
+Merchant lists their API on our Registry (e.g., "GET /eth-price" costs 1 MNEE).
+Buyer sends 1 MNEE to the Merchant's Wallet directly on-chain.
+Buyer calls the AgentLink Proxy with the Transaction Hash.
+AgentLink verifies the transaction on the blockchain.
+AgentLink fetches the data from the Merchant and returns it to the Buyer.
+
+2. Tech Stack (Strict for AI)
+Backend (The Platform): Node.js + Express + Ethers.js (v6).
+Database: better-sqlite3 (Fastest to setup, no separate DB server needed).
+Frontend (The Dashboard): React + Tailwind (Just to visualize the "Flow" for the demo video).
+Agents (The Demo): Two simple Node.js scripts running locally.
+
+3. Module 1: The "Platform" (Backend)
+Goal: A server that manages the registry and verifies payments.
+Database Schema (SQLite)
+services:
+id (Integer, Primary Key)
+name (String, e.g., "EtherPriceBot")
+wallet_address (String, where they want to receive MNEE)
+endpoint_url (String, e.g., "http://localhost:4000/price")
+price (String, e.g., "1.0")
+API Endpoints
+POST /register:
+Input: { name, wallet_address, endpoint_url, price }
+Action: Save to DB. Return { service_id }.
+POST /proxy-request:
+Input: { service_id, tx_hash, buyer_query }
+Action:
+Look up service by ID.
+Verify on Blockchain: Check if tx_hash successfully sent price amount of MNEE to service.wallet_address.
+Forward Request: If valid, make a POST request to service.endpoint_url with the buyer_query.
+Return the Merchant's response to the Buyer.
+
+
+4. Module 2: The "Agents" (Demo Scripts)
+Goal: Two separate scripts to prove the infrastructure works.
+Agent A: The Merchant ("Oracle")
+A tiny Express server running on port 4000.
+Endpoint: POST /price.
+Logic: It fetches the real-time Ethereum price (mock it or use CoinGecko API) and returns: {"eth": "$2250", "timestamp": "..."}.
+Note: It does not check payments. It trusts the "Platform" to only call it if payment is verified.
+Agent B: The Buyer ("Analyst")
+A script that:
+Uses a private key to sign/send a real MNEE transaction to the Merchant's wallet.
+Waits for the tx_hash.
+Calls the Platform (POST /proxy-request) with that hash.
+Logs the data received: "I paid 1 MNEE and got this data: ..."
+
+
+5. Module 3: The "Dashboard" (Frontend)
+Goal: A "God View" for the demo video. We don't need a UI for the agents, but we need a UI for the Judges to see what happened.
+Live Feed: A simple table that auto-refreshes.
+Columns: Time, Buyer Address, Merchant, Status (Pending/Verified/Forwarded), Data Transferred.
+Implementation: The Backend emits a socket event (or just exposes GET /logs) whenever a request is processed.

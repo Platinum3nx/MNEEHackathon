@@ -41,7 +41,7 @@ async function main() {
         // In a real flow, we'd probably register the service first or know the ID.
         // For this demo, we assume service_id 1 is the merchant.
         const payload = {
-            service_id: 1,
+            service_id: 3,
             tx_hash: tx.hash,
             payload: { request_type: 'get_price' }
         };

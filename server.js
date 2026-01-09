@@ -29,7 +29,7 @@ db.exec(`
 async function verifyPayment(txHash, recipient, amount) {
   try {
     // using a public Sepolia RPC
-    const provider = new ethers.JsonRpcProvider('https://rpc.sepolia.org');
+    const provider = new ethers.JsonRpcProvider('https://ethereum-sepolia-rpc.publicnode.com');
 
     // Get transaction receipt to ensure it is mined/confirmed
     const receipt = await provider.getTransactionReceipt(txHash);
@@ -148,4 +148,5 @@ app.post('/proxy-request', async (req, res) => {
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
+  console.log('Connected to Sepolia via publicnode');
 });

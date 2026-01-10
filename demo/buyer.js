@@ -16,10 +16,10 @@ async function main() {
 
         console.log(`Wallet address: ${wallet.address}`);
 
-        // Step A: Send 5.0 MockMNEE Tokens
+        // Step A: Send 0.0001 MockMNEE Tokens
         const TOKEN_ADDRESS = '0x6027Ad2bB75BD56B9E5B95A1348B146Ef41bF74e';
-        const amountToSend = ethers.parseUnits("5.0", 18);
-        console.log(`Sending 5.0 MockMNEE to ${TARGET_WALLET}...`);
+        const amountToSend = ethers.parseUnits("0.0001", 18);
+        console.log(`Sending 0.0001 MockMNEE to ${TARGET_WALLET}...`);
 
         const abi = [
             "function transfer(address to, uint256 amount) returns (bool)"

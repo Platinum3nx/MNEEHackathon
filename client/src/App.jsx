@@ -6,24 +6,49 @@ function App() {
   const [services, setServices] = useState([]);
   const [transactions, setTransactions] = useState([]);
 
+  // Registration Form State
+  const [formData, setFormData] = useState({
+    name: '',
+    price: '',
+    wallet_address: '',
+    endpoint_url: ''
+  });
+
+  const fetchData = async () => {
+    try {
+      const servicesRes = await axios.get('http://localhost:3000/services');
+      setServices(servicesRes.data);
+
+      const transactionsRes = await axios.get('http://localhost:3000/transactions');
+      setTransactions(transactionsRes.data);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const servicesRes = await axios.get('http://localhost:3000/services');
-        setServices(servicesRes.data);
-
-        const transactionsRes = await axios.get('http://localhost:3000/transactions');
-        setTransactions(transactionsRes.data);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      }
-    };
-
     fetchData();
     const interval = setInterval(fetchData, 2000); // Poll every 2 seconds
 
     return () => clearInterval(interval);
   }, []);
+
+  const handleInputChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post('http://localhost:3000/register', formData);
+      // Clear form and immediately refresh list
+      setFormData({ name: '', price: '', wallet_address: '', endpoint_url: '' });
+      fetchData();
+    } catch (error) {
+      console.error('Error registering service:', error);
+      alert('Failed to register service');
+    }
+  };
 
   return (
     <div className="command-center">
@@ -34,6 +59,51 @@ function App() {
 
       <div className="dashboard">
         <div className="panel left-panel">
+          <h2>REGISTER NEW AGENT</h2>
+          <form className="registration-form" onSubmit={handleRegister}>
+            <div className="form-group">
+              <input
+                type="text"
+                name="name"
+                placeholder="Agent Name"
+                value={formData.name}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <input
+                type="text"
+                name="price"
+                placeholder="Price (MNEE)"
+                value={formData.price}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <input
+                type="text"
+                name="wallet_address"
+                placeholder="Wallet Address"
+                value={formData.wallet_address}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <input
+                type="text"
+                name="endpoint_url"
+                placeholder="Endpoint URL"
+                value={formData.endpoint_url}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <button type="submit" className="register-btn">REGISTER SERVICE</button>
+          </form>
+
           <h2>ACTIVE AGENTS [{services.length}]</h2>
           <div className="list-container">
             {services.map(service => (
@@ -44,7 +114,7 @@ function App() {
                 </div>
                 <div className="service-details">
                   <p>Deployed At: {service.wallet_address.substring(0, 10)}...</p>
-                  <p>Price: {service.price} ETH</p>
+                  <p>Price: {service.price} MNEE</p>
                   <p className="endpoint">{service.endpoint_url}</p>
                 </div>
               </div>

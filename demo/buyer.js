@@ -2,10 +2,10 @@ require('dotenv').config();
 const { ethers } = require('ethers');
 const axios = require('axios');
 
-const { TEST_PRIVATE_KEY, RPC_URL, TARGET_WALLET } = process.env;
+const { TEST_PRIVATE_KEY, RPC_URL } = process.env;
 
 async function main() {
-    if (!TEST_PRIVATE_KEY || !RPC_URL || !TARGET_WALLET) {
+    if (!TEST_PRIVATE_KEY || !RPC_URL) {
         console.error('Missing environment variables. Please check .env file.');
         process.exit(1);
     }
@@ -14,48 +14,61 @@ async function main() {
         const provider = new ethers.JsonRpcProvider(RPC_URL);
         const wallet = new ethers.Wallet(TEST_PRIVATE_KEY, provider);
 
-        console.log(`Wallet address: ${wallet.address}`);
+        console.log(`Buyer Wallet: ${wallet.address}`);
 
-        // Step A: Send 0.0001 MockMNEE Tokens
+        // 1. Fetch Active Services
+        console.log('Fetching active services from network...');
+        let services = [];
+        try {
+            const response = await axios.get('http://localhost:3000/services');
+            services = response.data;
+        } catch (error) {
+            console.error('Failed to fetch services:', error.message);
+            process.exit(1);
+        }
+
+        if (services.length === 0) {
+            console.log('No active services found in the network.');
+            return;
+        }
+
+        // 2. Random Selection
+        const targetService = services[Math.floor(Math.random() * services.length)];
+        console.log(`Selected Target: ${targetService.name} (ID: ${targetService.id})`);
+        console.log(`Service Price: ${targetService.price} MNEE`);
+        console.log(`Target Address: ${targetService.wallet_address}`);
+
+        // 3. Dynamic Payment (ERC-20)
         const TOKEN_ADDRESS = '0x6027Ad2bB75BD56B9E5B95A1348B146Ef41bF74e';
-        const amountToSend = ethers.parseUnits("0.0001", 18);
-        console.log(`Sending 0.0001 MockMNEE to ${TARGET_WALLET}...`);
-
-        const abi = [
-            "function transfer(address to, uint256 amount) returns (bool)"
-        ];
+        const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
         const contract = new ethers.Contract(TOKEN_ADDRESS, abi, wallet);
 
-        const tx = await contract.transfer(TARGET_WALLET, amountToSend);
+        // Parse exact price string to BigInt
+        const amountToSend = ethers.parseUnits(targetService.price, 18);
 
+        console.log(`Sending ${targetService.price} MockMNEE to ${targetService.wallet_address}...`);
+
+        const tx = await contract.transfer(targetService.wallet_address, amountToSend);
         console.log(`Transaction sent: ${tx.hash}`);
 
-        // Step B: Wait for confirmation
+        // Wait for confirmation
         console.log('Waiting for confirmation...');
         await tx.wait();
         console.log('Transaction confirmed.');
 
-        // Step C: Log transaction hash
-        // already logged above, but used in payload below
-
-        // Step D: Call main platform proxy
+        // 4. Proxy Request
         const proxyUrl = 'http://localhost:3000/proxy-request';
-        // ID 1 is likely the target service, assuming it's registered. 
-        // In a real flow, we'd probably register the service first or know the ID.
-        // For this demo, we assume service_id 1 is the merchant.
         const payload = {
-            service_id: 3,
+            service_id: targetService.id,
             tx_hash: tx.hash,
-            payload: { request_type: 'get_price' }
+            payload: { request_type: 'generic_request', timestamp: Date.now() }
         };
 
-        console.log(`Requesting proxy to: ${proxyUrl} with payload:`, payload);
+        console.log(`Requesting proxy to: ${proxyUrl}...`);
 
         try {
             const response = await axios.post(proxyUrl, payload);
-
-            // Step E: Log final data
-            console.log('Final Response from Merchant:', response.data);
+            console.log('Final Response from Service:', response.data);
         } catch (error) {
             if (error.response) {
                 console.error('Proxy Error Response:', error.response.status, error.response.data);
